@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  FileText, Download, Star, Heart, Trash2, Package,
+  FileText, Download, Star, Heart, Trash2,
   Shield, Smile, Frown, Loader2, Eye,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -37,7 +37,9 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<ReportWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [savedFilter, setSavedFilter] = useState<'all' | 'favorite'>('all');
+  const [recommendationFilter, setRecommendationFilter] = useState<'all' | RecommendationLevel>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'trust_high' | 'trust_low'>('newest');
   const [viewReport, setViewReport] = useState<ReportWithDetails | null>(null);
 
   useEffect(() => {
@@ -199,11 +201,28 @@ export default function ReportsPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const totalReports = reports.length;
+  const favoriteReports = reports.filter((r) => r.is_favorite).length;
+  const averageTrustScore = totalReports > 0
+    ? Math.round(reports.reduce((sum, r) => sum + r.analysis.trust_score, 0) / totalReports)
+    : 0;
+  const positivelyRecommended = reports.filter((r) =>
+    r.analysis.recommendation === 'highly_recommended' || r.analysis.recommendation === 'recommended',
+  ).length;
+
   const filteredReports = reports.filter((r) => {
     const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase()) ||
       r.analysis_product?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'all' || (filter === 'favorite' && r.is_favorite);
-    return matchesSearch && matchesFilter;
+    const matchesSavedFilter = savedFilter === 'all' || (savedFilter === 'favorite' && r.is_favorite);
+    const matchesRecommendation = recommendationFilter === 'all' || r.analysis.recommendation === recommendationFilter;
+    return matchesSearch && matchesSavedFilter && matchesRecommendation;
+  });
+
+  const sortedReports = [...filteredReports].sort((a, b) => {
+    if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (sortBy === 'trust_high') return b.analysis.trust_score - a.analysis.trust_score;
+    if (sortBy === 'trust_low') return a.analysis.trust_score - b.analysis.trust_score;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   if (loading) {
@@ -223,15 +242,62 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Total Reports</p>
+                <p className="text-2xl font-bold">{totalReports}</p>
+              </div>
+              <FileText className="w-5 h-5 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Favorites</p>
+                <p className="text-2xl font-bold">{favoriteReports}</p>
+              </div>
+              <Heart className="w-5 h-5 text-destructive" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Avg Trust Score</p>
+                <p className="text-2xl font-bold">{averageTrustScore}/100</p>
+              </div>
+              <Shield className="w-5 h-5 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Positive Recommendations</p>
+                <p className="text-2xl font-bold">{positivelyRecommended}</p>
+              </div>
+              <Smile className="w-5 h-5 text-success" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-3">
         <Input
           placeholder="Search reports..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1"
+          className="flex-1 lg:min-w-[240px]"
         />
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-full sm:w-40">
+        <Select value={savedFilter} onValueChange={(value: 'all' | 'favorite') => setSavedFilter(value)}>
+          <SelectTrigger className="w-full lg:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -239,17 +305,46 @@ export default function ReportsPage() {
             <SelectItem value="favorite">Favorites</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={recommendationFilter}
+          onValueChange={(value: 'all' | RecommendationLevel) => setRecommendationFilter(value)}
+        >
+          <SelectTrigger className="w-full lg:w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Recommendations</SelectItem>
+            <SelectItem value="highly_recommended">Highly Recommended</SelectItem>
+            <SelectItem value="recommended">Recommended</SelectItem>
+            <SelectItem value="consider_alternatives">Consider Alternatives</SelectItem>
+            <SelectItem value="avoid">Avoid</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortBy}
+          onValueChange={(value: 'newest' | 'oldest' | 'trust_high' | 'trust_low') => setSortBy(value)}
+        >
+          <SelectTrigger className="w-full lg:w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest First</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+            <SelectItem value="trust_high">Trust: High to Low</SelectItem>
+            <SelectItem value="trust_low">Trust: Low to High</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      {filteredReports.length === 0 ? (
+      {sortedReports.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <FileText className="w-8 h-8 text-primary" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No reports yet</h3>
+            <h3 className="text-lg font-semibold mb-2">No matching reports</h3>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-              Save analysis reports from the product analysis page to view and download them here.
+              Try changing your filters, or save analysis reports from the product analysis page to see them here.
             </p>
             <a href="/dashboard/analyze">
               <Button>Analyze a Product</Button>
@@ -258,7 +353,7 @@ export default function ReportsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredReports.map((report) => {
+          {sortedReports.map((report) => {
             const a = report.analysis;
             const p = report.analysis_product;
             return (
